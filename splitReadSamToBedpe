@@ -166,6 +166,63 @@ def outputBedpe(bed1, bed2, opts):
               "MQ1="+str(bed1[7])+":"+"MQ2="+str(bed2[7])+":"+"AS1="+str(bed1[8])+":"+"AS2="+str(bed2[8])
         #print("WOW")
 
+def checkforSplitAtStart(cigarOps, start=True):
+    
+    qsPos = 0
+    qePos = 0
+    qLen  = 0
+    # if first op is a H, need to shift start position 
+    # the opPosition counter sees if the for loop is looking at the first index of the cigar object    
+    opPosition = 0
+    cigar = cigarOps[0]
+    if opPosition == 0 and (cigar.op == 'H' or cigar.op == 'S'):
+        return cigar.length
+    else:
+        return None
+def outputBed_Tel(read_info,out_f,start=True):
+    """
+        Extract split bed file with some telomere information.
+    """
+    cigar_string = read_info[10]
+    cigarOpStrings = cigarSearch.findall(cigar_string)
+    cigarOps = []
+    for opString in cigarOpStrings:
+        cigarOpList = atomicCigarSearch.findall(opString)
+        # "struct" for the op and it's length
+        cigar = cigarOp(cigarOpList[0][0], cigarOpList[0][1])
+        # add to the list of cigarOps
+        cigarOps.append(cigar)
+        cigarOps = cigarOps
+    if not start:
+        cigarOps.reverse()
+    how_much_split = checkforSplitAtStart(cigarOps, start=start)
+    if how_much_split is not None:
+        chrom =  read_info[0] 
+        idx = read_info[3]
+        strand = read_info[4]
+        event_id = "telomere_deletion"
+        if start == True:
+            br1 = 0
+            br2 = read_info[1]
+            start_read = 1
+            end_read = how_much_split
+            deletion_id = chrom + ":" + "1-" + str(br2)
+            out_string = "\t".join(map(str,[chrom, br1,br1+1, chrom,br2,br2+1, strand, start_read, end_read, event_id, deletion_id,idx])) 
+            #read_info
+            print(out_string)
+        else:
+            br2 = "END" 
+            # END of chromosome
+            br1 = read_info[2]
+            start_read = br1
+            end_read = how_much_split
+            deletion_id = chrom + ":" + str(br1) +"-END" 
+            out_string = "\t".join(map(str,[chrom, br1,int(br1)+1, chrom,br2,br2, strand, int(br1) + 1, int(br1) +how_much_split, event_id, deletion_id,idx])) 
+            print(out_string)
+    #check_for_split()
+    #query = calcQueryPosFromCigar(blockList[i].cigarOps)
+
+
 def makeBedpe(blockList, opts):
     if (len(blockList) < 2):
         return
@@ -209,13 +266,15 @@ def makeBedpe(blockList, opts):
         if (maxOverlap > 0):
             pBedBlock[maxJvalue].append(sBedBlock[i])
     # Now output all pairs from adjoining similarity sets.
+    out_f = open("telomeres.txt","a")
     for i in xrange(len(pBedBlock)-1):
         set1 = pBedBlock[i]
         duplicate_alignments = []
-	for j in xrange(i+1, len(pBedBlock)):
+        for j in xrange(i+1, len(pBedBlock)):
             set2 = pBedBlock[j];
             # We need to check for the "span" feature.
             # Let the adjacent ones goes through unmolested.
+
             p1 = set1[0];
             p2 = set2[0];
             # sys.stderr.write(str(p1[6]) + ' ' + str(p2[5]) + '\n');
@@ -227,15 +286,23 @@ def makeBedpe(blockList, opts):
             #print p1[11]
              #   print "Non-matching reference assembly" 
             if ((opts.span == 0 and j > i+1) or (opts.span > 0 and p1[6] + opts.span -1 < p2[5])):
-             #   print p1
+                #   print p1
               #  print p2
                # print opts.span
                 #print "breaking"
                 break;
+            if (i == 0 and j == (i+1)):
+                # Check for a telomeric 5' deletion, this assumes the read aligns to the entire chromosome in some cases it will in some
+                # it won't
+                # Heuristic to check whether we have something near the end or start of the chromosome.
+                outputBed_Tel(set1[0],out_f,start=True)  
+
             for ii in xrange(len(set1)):
                 for jj in xrange(len(set2)):
                     outputBedpe(set1[ii], set2[jj], opts)
-
+    outputBed_Tel(pBedBlock[i+1][0],out_f,start=False)  
+    out_f.close()
+    # Check for telomeric 3' deletion.
 
 def calcRefPosFromCigar(cigarOps, alignmentStart):
     rPos = alignmentStart
@@ -305,6 +372,8 @@ Modified by GGF on March 27, 2012 to add span parameter.
     parser.add_option("-s", dest="span", help="maximum span to allow between reported pairs (default 0)", metavar="SPAN", type="int", default=0);
     (opts, args) = parser.parse_args()
 
+    out_f = open("telomeres.txt","w")
+    out_f.close()
     if opts.samFile is None:
         parser.print_help()
         print

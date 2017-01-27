@@ -45,41 +45,47 @@ def _extract_breakpoints(region, slop=50, fasta_input_file="/Users/smilefreak/Pr
         os.mkdir("breakpoints")
     except OSError:
         pass 
-    with open(os.path.join("breakpoints",region.event_id + ".brk2.fasta"), "w") as brk1_f:
-        with open(os.path.join("breakpoints",region.event_id + ".brk1.fasta"), "w") as brk2_f: 
+    with open(os.path.join("breakpoints",region.event_id + ".brk1.fasta"), "w") as brk1_f:
+        with open(os.path.join("breakpoints",region.event_id + ".brk2.fasta"), "w") as brk2_f: 
             header = ">" + region.event_id  
             seq = ""
             if region.strand1 == region.strand2: 
                 start_read = region.queryEnd1  
                 end_read = region.queryStart2
-                if "duplication" in region.variant_type: 
-                    end_read = end_read + region.event_length
-                if end_read > start_read:
+                if end_read >start_read:
                     #
                     # must be [   DUP    ]------[    DUP      ]
                     #
                     # We must have duplication situation, so just extract the sequence
                     # Could be no insertion.
-                    h1 = "_" +region.chrom1 +":"+str(int(region.breakStart1)-50) +"-" + str(int(region.breakStart1)+50)
-                    h2 = "_" + region.chrom1+":"+str(int(region.breakStart2)-50) +"-" + str(int(region.breakStart2)+50)
+                    if "duplication" in region.variant_type: 
+                        h1 = "_" +region.chrom1 +":"+str(int(region.breakStart2)-50 + 1 ) +"-" + str(int(region.breakStart2)+50) + "_strand_" + region.strand1 
+                        h2 = "_" + region.chrom1+":"+str(int(region.breakStart1)-50 + 1) +"-" + str(int(region.breakStart1)+50) + "_strand_" + region.strand1 
+                    else: 
+                        h1 = "_" +region.chrom1 +":"+str(int(region.breakStart1)-50 + 1 ) +"-" + str(int(region.breakStart1)+50) + "_strand_" + region.strand1 
+                        h2 = "_" + region.chrom1+":"+str(int(region.breakStart2)-50 + 1) +"-" + str(int(region.breakStart2)+50) + "_strand_" + region.strand1 
                     seq1 = seq_fastq[(int(start_read)-50):(int(start_read)+50)]
                     seq2 = seq_fastq[(int(end_read)-50):(int(end_read)+50)]
                     #print(seq)
                     if region.strand1 == "-":
+                        seq1 = seq_fastq[(int(start_read)-50):(int(start_read)+50)]
+                        seq2 = seq_fastq[(int(end_read)-50):(int(end_read)+50)]
                         seq1 = complement(seq1)
                         seq2 = complement(seq2)
-                    #print(seq)
-                    #print(seq)bww
+                #print(seq)
+                #print(seq)bww
                 elif end_read <= start_read:
-                    h1 = "_" +region.chrom1 +":"+str(int(region.breakStart2)-50) +"-" + str(int(region.breakStart2)+50)
-                    h2 = "_" + region.chrom1+":"+str(int(region.breakStart1)-50) +"-" + str(int(region.breakStart1)+50)
-                    seq1 = seq_fastq[(int(end_read)-50):(int(end_read)+50)]
+                    h1 = "_" +region.chrom1 +":"+str(int(region.breakStart1)-50 + 1) +"-" + str(int(region.breakStart1)+50) + "_strand_" + region.strand1 
+                    h2 = "_" + region.chrom1+":"+str(int(region.breakStart2)-50 + 1) +"-" + str(int(region.breakStart2)+50) + "_strand_" + region.strand1
+                    seq1= seq_fastq[(int(end_read)-50):(int(end_read)+50)]
                     seq2 = seq_fastq[(int(start_read)-50):(int(start_read)+50)]
                     #print(seq)
                     if region.strand1 == "-":
+                        seq1 = seq_fastq[(int(end_read)-50):(int(end_read)+50)]
+                        seq2 = seq_fastq[(int(start_read)-50):(int(start_read)+50)]
                         seq1 = complement(seq1)
                         seq2 = complement(seq2)
-                    #print(seq)
+                   #print(seq)
                 # deal with inversions next
                 brk1_f.write(header + h1 +"\n"+ seq1 + "\n") 
                 brk2_f.write(header + h2 +"\n"+ seq2 + "\n") 
@@ -87,6 +93,14 @@ def _extract_breakpoints(region, slop=50, fasta_input_file="/Users/smilefreak/Pr
                 brk2_f.write(header + h2 +"\n"+ seq2[:50] + "\n") 
                 brk1_f.write(header + h1 +"\n"+ seq1[50:] + "\n") 
                 brk2_f.write(header + h2 +"\n"+ seq2[50:]+ "\n") 
+            elif region.strand1 != region.strand2:
+                start_read = region.queryEnd1
+                end_read = region.queryStart2
+                if end_read > start_read:
+                    h1 = "_" +region.chrom1 +":"+str(int(region.breakStart1)-50 + 1) +"-" + str(int(region.breakStart1)+50) + "_strand1_" + region.strand1 +"_strand2_"+ region.strand2
+                    h2 = "_" +region.chrom1 +":"+str(int(region.breakStart2)-50 + 1) +"-" + str(int(region.breakStart2)+50) + "_strand1_" + region.strand1 +"_strand2_"+ region.strand2
+                else:
+                    pass
 
 def complement(sequence):
     sequence_updated = []    
@@ -142,7 +156,6 @@ def processFasta(region, fasta_input_file="/Users/smilefreak/Programming/OpenSou
                     seq = complement(seq)
                 #print(seq)
            # print(region.strand1)
-        #elif region.strand1 != region.strand2:
             #print(region.strand1)
         out_f.write(header + seq + "\n") 
 
@@ -314,10 +327,12 @@ def splitterToBreakpoint(contigFile,splitReadSlop,localRange):
                 breakEnd2 = str(end2+1+splitReadSlop)
         else:
             print "ERROR: " + ID + " is lost in breakpoint locus prediction step. Contact Mitchell"
-        print split
         cnv_output = CNVOutput(chrom1, breakStart1, breakEnd1, chrom2, breakStart2, breakEnd2, ID, score, strand1, strand2, queryStart1, queryEnd1, queryStart2, queryEnd2, minNonOverlap, queryLength, qualScores, variant, variant_type, unaccounted_for_sequence, event_length)
         processFasta(cnv_output)
         _extract_breakpoints(cnv_output)
+        # For now ignore inversions
+        if variant_type != "inversion":
+            print(cnv_output)
 def main():
     usage = "%prog -b <bedpe> -c <contigFile.bedpe> [options]\nVersion: 0.2\nAuthor: Mitchell L. Leibowitz\nEdited: Aug, 2011 by Colby Chiang (details below)\n \
 \nEdits included:\n 1) When switching ordering of bedpe positioning (if start2>start1), also switch orientation \n 2) Makes sure all comparisons are integer/integer comparisons or \
@@ -326,7 +341,7 @@ Note: Add slop at your own risk.\n\nPrints modified bedpe so bedpe entry 1 is al
     parser = OptionParser(usage)
     parser.add_option("-i", dest="contigFile", metavar="FILE", help="BEDPE file containing the split contigs; requires 10 column bedpe plus 11-14 as query coordinates, field 15 as query length \
 and field 16 minimum non overlap.")
-    parser.add_option("-s", dest="splitReadSlop", metavar="INT", type="int", default=1, help="Bidirectional slop around the breakpoint [default = 1]")
+    parser.add_option("-s", dest="splitReadSlop", metavar="INT", type="int", default=0, help="Bidirectional slop around the breakpoint [default = 1]")
     parser.add_option("-r", dest="localRange", default=1000000, type="int", metavar="INT", help="the range of coordinates considered local (for breakpoint classification) [default = 1000000]; Calculated by subtracting field 6 from field 2.")
     
     (opts, args) = parser.parse_args()
